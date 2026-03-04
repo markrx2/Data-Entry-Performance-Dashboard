@@ -1,0 +1,23 @@
+{
+  "name": "repo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://x-access-token:ghs_9NKSZpwdhCLoAhncOg5MW4wYSut90A1N4DTt@github.com/markrx2/Data-Entry-Performance-Dashboard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/markrx2/Data-Entry-Performance-Dashboard/issues"
+  },
+  "homepage": "https://github.com/markrx2/Data-Entry-Performance-Dashboard#readme",
+  "dependencies": {
+    "@netlify/blobs": "^10.7.0"
+  }
+}

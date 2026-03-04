@@ -59,7 +59,19 @@
         .btn-log { background: var(--primary); color: white; }
         .btn-download { background: var(--success); color: white; }
         .btn-clear { background: var(--danger); color: white; }
+        .btn-sync { background: #7c4dff; color: white; }
         .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        .sync-bar {
+            display: flex; justify-content: center; align-items: center; gap: 20px;
+            max-width: 1000px; margin: 0 auto 15px auto; padding: 10px 15px;
+            background: #e8eaf6; border-radius: 8px; font-size: 0.85rem; color: #3c4043;
+        }
+        .sync-bar input[type="text"] { padding: 5px 10px; border: 1px solid #ccc; border-radius: 4px; width: 150px; }
+        .sync-status { font-weight: bold; }
+        .sync-status.synced { color: var(--success); }
+        .sync-status.syncing { color: var(--primary); }
+        .sync-status.error { color: var(--danger); }
     </style>
 </head>
 <body>
@@ -72,6 +84,22 @@
         <div style="font-size: 0.85rem; border-left: 1px solid #555; padding-left: 20px;">
             <input type="checkbox" id="audioToggle" checked> AUDIO ALERTS
         </div>
+    </div>
+    <div class="sync-bar">
+        <div>
+            Your Name: <input type="text" id="userName" placeholder="Enter name" value="">
+        </div>
+        <div>
+            <button class="btn btn-sync" onclick="saveToServer()" style="padding:6px 15px; font-size:0.8rem;">⬆ PUSH</button>
+            <button class="btn btn-sync" onclick="loadFromServer()" style="padding:6px 15px; font-size:0.8rem; background:#00897b;">⬇ PULL</button>
+        </div>
+        <div>
+            <label><input type="checkbox" id="autoSync" checked> Auto-sync every 30s</label>
+        </div>
+        <div>
+            <span id="syncStatus" class="sync-status synced">Ready</span>
+        </div>
+        <div id="lastUpdatedInfo" style="font-size:0.75rem; color:#666;"></div>
     </div>
 </div>
 
@@ -277,7 +305,111 @@
         } catch(e) {}
     }
 
+    // --- SHARED DATA SYNC ---
+    function gatherState() {
+        const queues = queueConfig.map((q, i) => {
+            const techs = [];
+            for (let l = 1; l <= 5; l++) {
+                techs.push({
+                    name: document.getElementById(`t-${i}-${l}`).value,
+                    count: document.getElementById(`c-${i}-${l}`).value,
+                    time: document.getElementById(`time-${i}-${l}`).value,
+                });
+            }
+            return {
+                volume: document.getElementById(`v-${i}`).value,
+                rate: document.getElementById(`r-${i}`).value,
+                techs,
+            };
+        });
+        return queues;
+    }
+
+    function applyState(queues) {
+        queues.forEach((q, i) => {
+            document.getElementById(`v-${i}`).value = q.volume;
+            document.getElementById(`r-${i}`).value = q.rate;
+            q.techs.forEach((t, l) => {
+                document.getElementById(`t-${i}-${l + 1}`).value = t.name;
+                document.getElementById(`c-${i}-${l + 1}`).value = t.count;
+                document.getElementById(`time-${i}-${l + 1}`).value = t.time;
+            });
+            recalc(i);
+        });
+    }
+
+    function setSyncStatus(text, cls) {
+        const el = document.getElementById('syncStatus');
+        el.textContent = text;
+        el.className = 'sync-status ' + cls;
+    }
+
+    async function saveToServer() {
+        setSyncStatus('Pushing...', 'syncing');
+        try {
+            const res = await fetch('/api/dashboard-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    queues: gatherState(),
+                    userName: document.getElementById('userName').value || 'Anonymous',
+                }),
+            });
+            const data = await res.json();
+            setSyncStatus('Pushed ✓', 'synced');
+            document.getElementById('lastUpdatedInfo').textContent =
+                'Last saved: ' + new Date(data.updatedAt).toLocaleTimeString();
+        } catch (e) {
+            setSyncStatus('Push failed', 'error');
+        }
+    }
+
+    async function loadFromServer() {
+        setSyncStatus('Pulling...', 'syncing');
+        try {
+            const res = await fetch('/api/dashboard-data');
+            const data = await res.json();
+            if (data.queues && data.queues.length) {
+                applyState(data.queues);
+                setSyncStatus('Pulled ✓', 'synced');
+                let info = '';
+                if (data.updatedAt) info += 'Last saved: ' + new Date(data.updatedAt).toLocaleTimeString();
+                if (data.updatedBy) info += ' by ' + data.updatedBy;
+                document.getElementById('lastUpdatedInfo').textContent = info;
+            } else {
+                setSyncStatus('No data yet', 'synced');
+            }
+        } catch (e) {
+            setSyncStatus('Pull failed', 'error');
+        }
+    }
+
+    // Auto-sync: pull latest data periodically
+    let syncInterval = null;
+    function startAutoSync() {
+        stopAutoSync();
+        syncInterval = setInterval(() => {
+            if (document.getElementById('autoSync').checked) {
+                loadFromServer();
+            }
+        }, 30000);
+    }
+    function stopAutoSync() {
+        if (syncInterval) clearInterval(syncInterval);
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('autoSync').addEventListener('change', (e) => {
+            if (e.target.checked) startAutoSync();
+            else stopAutoSync();
+        });
+    });
+
     window.onload = init;
+    // Load shared data on startup and start auto-sync
+    window.addEventListener('load', () => {
+        loadFromServer();
+        startAutoSync();
+    });
 </script>
 </body>
 </html>
